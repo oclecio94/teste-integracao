@@ -1,16 +1,23 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   const { token } = await req.json();
-  let clientId = "c6baf8c429a993382260c1f351f3aee8ede97de8";
-  let secretKey =
-    "fc110af2bf135f345cf99b84e5e01cc88277ff6abbf4e5be9852edc4f1f5";
+  let clientId = process.env.CLIENT_ID;
+  let secretKey = process.env.SECRET_KEY;
 
-  let code = "191391b5443084bb4f577a885434be055970baad";
+  //esse token expira em 1 minuto
+  let code = "4170fc3923e57fb3b5d8605958b570205c637b8c";
 
-  let access_token = "";
+  // let access_token = "";
 
-  let refresh_token = "";
+  // let refresh_token = "";
+
+  const tokenData = await prisma.token.findUnique({ where: { id: 1 } });
+
+  let access_token = tokenData?.access_token;
+
+  let refresh_token = tokenData?.refresh_token;
 
   let clientCredentials = Buffer.from(`${clientId}:${secretKey}`).toString(
     "base64"
@@ -35,6 +42,13 @@ export async function POST(req: Request) {
       });
 
       data = await res.json();
+
+      await prisma.token.create({
+        data: {
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+        },
+      });
     } else if (token == "refresh") {
       const res = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
         method: "POST",
@@ -46,22 +60,53 @@ export async function POST(req: Request) {
 
         body: new URLSearchParams({
           grant_type: "refresh_token",
-          token: refresh_token,
+          token: refresh_token!,
         }).toString(),
       });
 
       data = await res.json();
+
+      await prisma.token.update({
+        where: {
+          id: 1,
+        },
+        data: {
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+        },
+      });
     }
 
-    //@ts-ignore
-    access_token = data.access_token;
-    //@ts-ignore
-    refresh_token = data.refresh_token;
+    // //@ts-ignore
+    // access_token = data.access_token;
+    // //@ts-ignore
+    // refresh_token = data.refresh_token;
 
     console.log("data", data);
     console.log("access_token", access_token);
     console.log("refresh_token", refresh_token);
 
+    return NextResponse.json(data);
+  } catch (e) {
+    return NextResponse.json(e);
+  }
+}
+
+export async function GET() {
+  try {
+    const tokenData = await prisma.token.findUnique({ where: { id: 1 } });
+
+    let access_token = tokenData?.access_token;
+
+    const res = await fetch("https://www.bling.com.br/Api/v3/produtos", {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Bearer ${access_token}`,
+      },
+    });
+
+    const data = await res.json();
     return NextResponse.json(data);
   } catch (e) {
     return NextResponse.json(e);
